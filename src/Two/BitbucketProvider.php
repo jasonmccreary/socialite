@@ -3,6 +3,8 @@
 namespace Laravel\Socialite\Two;
 
 use Exception;
+use Illuminate\Support\Arr;
+use GuzzleHttp\ClientInterface;
 
 class BitbucketProvider extends AbstractProvider implements ProviderInterface
 {
@@ -12,6 +14,13 @@ class BitbucketProvider extends AbstractProvider implements ProviderInterface
      * @var array
      */
     protected $scopes = ['email'];
+
+    /**
+     * The separating character for the requested scopes.
+     *
+     * @var string
+     */
+    protected $scopeSeparator = ' ';
 
     /**
      * {@inheritdoc}
@@ -50,7 +59,7 @@ class BitbucketProvider extends AbstractProvider implements ProviderInterface
     /**
      * Get the email for the given access token.
      *
-     * @param  string $token
+     * @param  string  $token
      * @return string|null
      */
     protected function getEmailByToken($token)
@@ -78,16 +87,36 @@ class BitbucketProvider extends AbstractProvider implements ProviderInterface
     protected function mapUserToObject(array $user)
     {
         return (new User)->setRaw($user)->map([
-            'id' => $user['uuid'],
-            'nickname' => $user['username'],
-            'name' => array_get($user, 'display_name'),
-            'email' => array_get($user, 'email'),
-            'avatar' => array_get($user, 'links.avatar.href'),
+            'id' => $user['uuid'], 'nickname' => $user['username'],
+            'name' => Arr::get($user, 'display_name'), 'email' => Arr::get($user, 'email'),
+            'avatar' => Arr::get($user, 'links.avatar.href'),
         ]);
     }
 
     /**
-     * {@inheritdoc}
+     * Get the access token for the given code.
+     *
+     * @param  string  $code
+     * @return string
+     */
+    public function getAccessToken($code)
+    {
+        $postKey = (version_compare(ClientInterface::VERSION, '6') === 1) ? 'form_params' : 'body';
+
+        $response = $this->getHttpClient()->post($this->getTokenUrl(), [
+            'auth' => [$this->clientId, $this->clientSecret],
+            'headers' => ['Accept' => 'application/json'],
+            $postKey => $this->getTokenFields($code),
+        ]);
+
+        return json_decode($response->getBody(), true)['access_token'];
+    }
+
+    /**
+     * Get the POST fields for the token request.
+     *
+     * @param  string  $code
+     * @return array
      */
     protected function getTokenFields($code)
     {
